@@ -27,6 +27,12 @@ final class Settings {
         set { defaults.set(newValue, forKey: "mirror") }
     }
 
+    /// Nome do tema do olho (pronto ou da pasta de temas).
+    var theme: String {
+        get { defaults.string(forKey: "theme") ?? Theme.dragon.name }
+        set { defaults.set(newValue, forKey: "theme") }
+    }
+
     /// Modo teste: Forçar Encerrar (⌥⌘⎋) continua funcionando enquanto bloqueado.
     var safeMode: Bool {
         get { defaults.object(forKey: "safeMode") as? Bool ?? true }

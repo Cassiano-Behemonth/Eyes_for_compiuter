@@ -1,6 +1,10 @@
 import AppKit
 
 let args = CommandLine.arguments
+// `--tema Nome` antes de `--snapshot`/`--icon` escolhe o tema da imagem.
+if let i = args.firstIndex(of: "--tema"), i + 1 < args.count {
+    Theme.current = Theme.named(args[i + 1])
+}
 if let i = args.firstIndex(of: "--snapshot") {
     exit(Snapshot.run(arguments: Array(args[(i + 1)...])))
 }

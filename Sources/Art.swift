@@ -58,13 +58,29 @@ enum Art {
         CGGradient(colorsSpace: sRGB, colors: colors as CFArray, locations: locations)!
     }
 
+    /// Posições espalhadas por igual, ou as originais quando são as 6 cores do Dragão.
+    private static func stops(_ colors: [UInt32], _ six: [CGFloat]) -> [CGFloat] {
+        colors.count == six.count ? six : colors.indices.map { CGFloat($0) / CGFloat(max(1, colors.count - 1)) }
+    }
+
+    /// Desenha a imagem cobrindo o retângulo inteiro (corta o que sobrar, sem distorcer).
+    private static func fill(_ ctx: CGContext, _ image: CGImage, _ rect: CGRect) {
+        let s = max(rect.width / CGFloat(image.width), rect.height / CGFloat(image.height))
+        let w = CGFloat(image.width) * s, h = CGFloat(image.height) * s
+        ctx.saveGState()
+        ctx.clip(to: rect)
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: rect.midX - w / 2, y: rect.midY - h / 2, width: w, height: h))
+        ctx.restoreGState()
+    }
+
     private static func polar(_ c: CGPoint, _ r: CGFloat, _ angle: CGFloat) -> CGPoint {
         CGPoint(x: c.x + cos(angle) * r, y: c.y + sin(angle) * r)
     }
 
     // MARK: - Íris
 
-    static func iris(radius R: CGFloat, scale: CGFloat) -> CGImage {
+    static func iris(radius R: CGFloat, scale: CGFloat, theme: Theme) -> CGImage {
         let ctx = canvas(CGSize(width: R * 2, height: R * 2), scale)
         let c = CGPoint(x: R, y: R)
         var rng = SeededRandom(seed: 7)
@@ -72,9 +88,22 @@ enum Art {
         ctx.addEllipse(in: CGRect(x: 0, y: 0, width: R * 2, height: R * 2))
         ctx.clip()
 
+        func limbalRing() {
+            let dark = theme.fibers[2]
+            ctx.drawRadialGradient(gradient([Theme.shade(dark, 0.27, 0), Theme.shade(dark, 0.27, 0.6), Theme.shade(dark, 0.27, 0.97)],
+                                            [0, 0.6, 1]),
+                                   startCenter: c, startRadius: R * 0.8, endCenter: c, endRadius: R, options: [])
+        }
+
+        // Íris do usuário: só escurece a borda pra encaixar no olho.
+        if let image = theme.irisImage {
+            fill(ctx, image, CGRect(x: 0, y: 0, width: R * 2, height: R * 2))
+            limbalRing()
+            return ctx.makeImage()!
+        }
+
         ctx.drawRadialGradient(
-            gradient([rgb(0xfff1a8), rgb(0xffc23a), rgb(0xff7a0a), rgb(0xe02a00), rgb(0x8a0700), rgb(0x2a0000)],
-                     [0, 0.14, 0.32, 0.55, 0.8, 1]),
+            gradient(theme.iris.map { rgb($0) }, stops(theme.iris, [0, 0.14, 0.32, 0.55, 0.8, 1])),
             startCenter: c, startRadius: 0, endCenter: c, endRadius: R, options: [])
 
         // Fibras radiais
@@ -86,11 +115,11 @@ enum Art {
             let pick = rng.next()
             let color: CGColor
             if pick < 0.4 {
-                color = rgb(0xffd25a, rng.range(0.08, 0.3))
+                color = rgb(theme.fibers[0], rng.range(0.08, 0.3))
             } else if pick < 0.75 {
-                color = rgb(0xff4a00, rng.range(0.1, 0.35))
+                color = rgb(theme.fibers[1], rng.range(0.1, 0.35))
             } else {
-                color = rgb(0x3a0000, rng.range(0.2, 0.5))
+                color = rgb(theme.fibers[2], rng.range(0.2, 0.5))
             }
             ctx.setStrokeColor(color)
             ctx.setLineWidth(rng.range(0.6, 2.4) * R / 300)
@@ -103,7 +132,7 @@ enum Art {
         for _ in 0..<80 {
             let p = polar(c, R * rng.range(0.35, 0.8), rng.range(0, .pi * 2))
             let s = R * rng.range(0.015, 0.055)
-            ctx.setFillColor(rgb(0x250000, rng.range(0.25, 0.5)))
+            ctx.setFillColor(Theme.shade(theme.fibers[2], 0.64, rng.range(0.25, 0.5)))
             ctx.fillEllipse(in: CGRect(x: p.x - s, y: p.y - s * 0.7, width: s * 2, height: s * 1.4))
         }
 
@@ -115,29 +144,33 @@ enum Art {
             i == 0 ? collarette.move(to: polar(c, r, t)) : collarette.addLine(to: polar(c, r, t))
         }
         ctx.addPath(collarette)
-        ctx.setStrokeColor(rgb(0xffe08a, 0.35))
+        ctx.setStrokeColor(rgb(theme.iris[0], 0.35))
         ctx.setLineWidth(R * 0.014)
         ctx.strokePath()
 
         // Brilho interno perto da pupila
-        ctx.drawRadialGradient(gradient([rgb(0xfff4c0, 0.55), rgb(0xfff4c0, 0)], [0, 1]),
+        ctx.drawRadialGradient(gradient([rgb(theme.iris[0], 0.55), rgb(theme.iris[0], 0)], [0, 1]),
                                startCenter: c, startRadius: 0, endCenter: c, endRadius: R * 0.32, options: [])
 
         // Anel límbico escuro
-        ctx.drawRadialGradient(gradient([rgb(0x0a0000, 0), rgb(0x0a0000, 0.6), rgb(0x0a0000, 0.97)], [0, 0.6, 1]),
-                               startCenter: c, startRadius: R * 0.8, endCenter: c, endRadius: R, options: [])
+        limbalRing()
 
         return ctx.makeImage()!
     }
 
     // MARK: - Esclera (fundo do olho, com veias)
 
-    static func sclera(size: CGSize, scale: CGFloat) -> CGImage {
+    static func sclera(size: CGSize, scale: CGFloat, theme: Theme) -> CGImage {
         let ctx = canvas(size, scale)
         let c = CGPoint(x: size.width / 2, y: size.height / 2)
         var rng = SeededRandom(seed: 99)
 
-        ctx.drawRadialGradient(gradient([rgb(0x6e1402), rgb(0x3a0500), rgb(0x120100)], [0, 0.55, 1]),
+        if let image = theme.scleraImage {
+            fill(ctx, image, CGRect(origin: .zero, size: size))
+            return ctx.makeImage()!
+        }
+
+        ctx.drawRadialGradient(gradient(theme.sclera.map { rgb($0) }, stops(theme.sclera, [0, 0.55, 1])),
                                startCenter: c, startRadius: 0, endCenter: c, endRadius: size.width / 2,
                                options: [.drawsAfterEndLocation])
 
@@ -151,7 +184,7 @@ enum Art {
             for _ in 0..<steps {
                 heading += rng.range(-0.45, 0.45)
                 let next = polar(p, size.width * 0.012, heading)
-                ctx.setStrokeColor(rgb(0x2a0000, 0.55))
+                ctx.setStrokeColor(rgb(theme.veins, 0.55))
                 ctx.setLineWidth(width)
                 ctx.move(to: p)
                 ctx.addLine(to: next)
@@ -165,11 +198,17 @@ enum Art {
 
     // MARK: - Pele com escamas
 
-    static func skin(size: CGSize, scale: CGFloat, eyeCenter: CGPoint, a: CGFloat, b: CGFloat) -> CGImage {
+    static func skin(size: CGSize, scale: CGFloat, eyeCenter: CGPoint, a: CGFloat, b: CGFloat, theme: Theme) -> CGImage {
         let ctx = canvas(size, scale)
         var rng = SeededRandom(seed: 1234)
 
-        ctx.setFillColor(rgb(0x070101))
+        // Fundo do usuário: vai inteiro, sem escamas nem vinheta.
+        if let image = theme.skinImage {
+            fill(ctx, image, CGRect(origin: .zero, size: size))
+            return ctx.makeImage()!
+        }
+
+        ctx.setFillColor(theme.scale(0.07))
         ctx.fill(CGRect(origin: .zero, size: size))
 
         func light(at p: CGPoint) -> CGFloat {
@@ -178,9 +217,6 @@ enum Art {
             return exp(-(dx * dx + dy * dy))
         }
 
-        func shade(_ base: (CGFloat, CGFloat, CGFloat), _ k: CGFloat, _ alpha: CGFloat = 1) -> CGColor {
-            CGColor(srgbRed: min(1, base.0 * k), green: min(1, base.1 * k), blue: min(1, base.2 * k), alpha: alpha)
-        }
 
         // Escamas pequenas em fileiras (de baixo pra cima, para as de cima cobrirem as de baixo)
         let sw = a * 0.13
@@ -200,7 +236,7 @@ enum Art {
                 path.closeSubpath()
 
                 let l = light(at: CGPoint(x: jx, y: y + sw * 0.3)) * rng.range(0.75, 1.15)
-                let base: (CGFloat, CGFloat, CGFloat) = (0.05 + 0.33 * l, 0.012 + 0.09 * l, 0.008 + 0.04 * l)
+                let base = 0.13 + 0.87 * l
 
                 // sombra que a escama projeta na de baixo
                 ctx.saveGState()
@@ -213,7 +249,7 @@ enum Art {
                 ctx.saveGState()
                 ctx.addPath(path)
                 ctx.clip()
-                ctx.drawLinearGradient(gradient([shade(base, 0.45), shade(base, 1.0)], [0, 1]),
+                ctx.drawLinearGradient(gradient([theme.scale(base * 0.45), theme.scale(base)], [0, 1]),
                                        start: CGPoint(x: jx, y: y + sw * 0.8), end: CGPoint(x: jx, y: y + sw * 0.1), options: [])
                 ctx.restoreGState()
 
@@ -223,7 +259,7 @@ enum Art {
                 edge.addQuadCurve(to: CGPoint(x: jx, y: y), control: CGPoint(x: jx - sw / 2, y: y + sw * 0.02))
                 edge.addQuadCurve(to: CGPoint(x: jx + sw / 2, y: y + sw * 0.35), control: CGPoint(x: jx + sw / 2, y: y + sw * 0.02))
                 ctx.addPath(edge)
-                ctx.setStrokeColor(shade(base, 1.7, 0.8))
+                ctx.setStrokeColor(theme.scale(base * 1.7, 0.8))
                 ctx.setLineWidth(sw * 0.03)
                 ctx.strokePath()
 
@@ -239,7 +275,7 @@ enum Art {
         ctx.addPath(lidOuter)
         ctx.addPath(lidOuter.copy(strokingWithWidth: b * 0.5, lineCap: .round, lineJoin: .round, miterLimit: 10))
         ctx.clip(using: .winding)
-        ctx.drawRadialGradient(gradient([rgb(0x4a1209), rgb(0x2a0805), rgb(0x0e0201)], [0, 0.6, 1]),
+        ctx.drawRadialGradient(gradient([theme.scale(0.76), theme.scale(0.43), theme.scale(0.14)], [0, 0.6, 1]),
                                startCenter: CGPoint(x: eyeCenter.x, y: eyeCenter.y - b * 0.1), startRadius: 0,
                                endCenter: CGPoint(x: eyeCenter.x, y: eyeCenter.y - b * 0.1), endRadius: a * 1.1, options: [.drawsAfterEndLocation])
         // grânulos
@@ -247,7 +283,7 @@ enum Art {
             let x = eyeCenter.x + rng.range(-a * 1.1, a * 1.1)
             let y = eyeCenter.y + rng.range(-b * 1.5, b * 1.5)
             let r = b * rng.range(0.015, 0.04)
-            ctx.setFillColor(rng.next() < 0.5 ? rgb(0x000000, 0.35) : rgb(0x7a2410, 0.18))
+            ctx.setFillColor(rng.next() < 0.5 ? rgb(0x000000, 0.35) : theme.scale(1.25, 0.18))
             ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 1.6))
         }
         // vincos acompanhando o formato do olho
@@ -257,7 +293,7 @@ enum Art {
             ctx.setLineWidth(b * 0.022)
             ctx.strokePath()
             ctx.addPath(almond(center: CGPoint(x: eyeCenter.x, y: eyeCenter.y - b * 0.025), a: a * (1 - 0.04 * o), b: b, openness: o))
-            ctx.setStrokeColor(rgb(0x8a2a12, 0.18))
+            ctx.setStrokeColor(theme.scale(1.4, 0.18))
             ctx.setLineWidth(b * 0.012)
             ctx.strokePath()
         }
@@ -310,16 +346,14 @@ enum Art {
 
                 ctx.setShadow(offset: .zero, blur: s * 0.35, color: rgb(0x000000, 0.95))
                 ctx.addPath(pebble)
-                ctx.setFillColor(rgb(0x0c0201))
+                ctx.setFillColor(theme.scale(0.11))
                 ctx.fillPath()
                 ctx.setShadow(offset: .zero, blur: 0, color: nil)
 
                 ctx.addPath(pebble)
                 ctx.clip()
                 ctx.drawRadialGradient(
-                    gradient([CGColor(srgbRed: 0.55 * l, green: 0.15 * l, blue: 0.06 * l, alpha: 1),
-                              CGColor(srgbRed: 0.22 * l, green: 0.05 * l, blue: 0.025 * l, alpha: 1),
-                              rgb(0x0a0201)], [0, 0.55, 1]),
+                    gradient([theme.scale(1.45 * l), theme.scale(0.58 * l), theme.scale(0.09)], [0, 0.55, 1]),
                     startCenter: CGPoint(x: 0, y: -h * 0.35), startRadius: 0,
                     endCenter: CGPoint(x: 0, y: h * 0.1), endRadius: w * 0.75, options: [.drawsAfterEndLocation])
                 ctx.restoreGState()

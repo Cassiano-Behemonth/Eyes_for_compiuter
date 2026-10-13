@@ -9,6 +9,7 @@ final class DragonEye {
     var target: CGPoint?
     /// 0 = longe, 1 = bem perto da câmera.
     var closeness: CGFloat = 0
+    private(set) var theme: Theme
 
     /// Tudo que respira junto (olho e pele). Dica e pontinhos ficam fora, parados.
     private let body = CALayer()
@@ -56,7 +57,8 @@ final class DragonEye {
     private var closeCompletion: (() -> Void)?
     private var rng = SeededRandom(seed: UInt64(Date().timeIntervalSince1970))
 
-    init() {
+    init(theme: Theme = .current) {
+        self.theme = theme
         root.backgroundColor = rgb(0x000000)
         root.addSublayer(body)
         body.addSublayer(skin)
@@ -79,13 +81,11 @@ final class DragonEye {
         root.addSublayer(hint)
 
         glow.type = .radial
-        glow.colors = [rgb(0xff4a00, 0.45), rgb(0xff2200, 0.12), rgb(0xff2200, 0)]
         glow.locations = [0, 0.45, 1]
         glow.startPoint = CGPoint(x: 0.5, y: 0.5)
         glow.endPoint = CGPoint(x: 1, y: 1)
 
         irisHeat.type = .radial
-        irisHeat.colors = [rgb(0xfff2b0, 0.9), rgb(0xff7a10, 0.55), rgb(0xff3000, 0)]
         irisHeat.startPoint = CGPoint(x: 0.5, y: 0.5)
         irisHeat.endPoint = CGPoint(x: 1, y: 1)
         irisHeat.opacity = 0
@@ -123,7 +123,6 @@ final class DragonEye {
         rimOuter.strokeColor = rgb(0x050000)
         rimOuter.lineJoin = .round
         rimInner.fillColor = nil
-        rimInner.strokeColor = rgb(0x2a0804)
         rimInner.shadowColor = rgb(0x000000)
         rimInner.shadowOpacity = 0.6
         rimInner.shadowOffset = .zero
@@ -131,8 +130,27 @@ final class DragonEye {
 
         hint.string = "digite sua senha"
         hint.alignmentMode = .center
-        hint.foregroundColor = rgb(0xff6a3a, 0.75)
         hint.opacity = 0
+        applyColors()
+    }
+
+    /// Troca o tema na hora (prévia aberta).
+    func setTheme(_ newTheme: Theme) {
+        theme = newTheme
+        applyColors()
+        let current = size
+        size = .zero
+        layout(size: current, scale: scale)
+    }
+
+    private func applyColors() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glow.colors = [rgb(theme.glow, 0.45), rgb(theme.glow, 0.12), rgb(theme.glow, 0)]
+        irisHeat.colors = [rgb(theme.iris[0], 0.9), rgb(theme.iris[theme.iris.count / 3], 0.55), rgb(theme.glow, 0)]
+        rimInner.strokeColor = theme.scale(0.43)
+        hint.foregroundColor = rgb(theme.accent, 0.75)
+        CATransaction.commit()
     }
 
     // MARK: - Layout
@@ -147,7 +165,7 @@ final class DragonEye {
         defer { CATransaction.commit() }
 
         (a, b, irisR, center) = Self.geometry(size)
-        let art = Self.art(size: size, scale: scale)
+        let art = Self.art(size: size, scale: scale, theme: theme)
 
         func setScale(_ l: CALayer) {
             l.contentsScale = scale
@@ -209,6 +227,7 @@ final class DragonEye {
     }
 
     private struct ArtKey: Hashable {
+        let theme: String
         let width: CGFloat
         let height: CGFloat
         let scale: CGFloat
@@ -217,17 +236,17 @@ final class DragonEye {
     private static let artLock = NSLock()
     private static var artCache: [ArtKey: ArtSet] = [:]
 
-    private static func art(size: CGSize, scale: CGFloat) -> ArtSet {
-        let key = ArtKey(width: size.width, height: size.height, scale: scale)
+    private static func art(size: CGSize, scale: CGFloat, theme: Theme) -> ArtSet {
+        let key = ArtKey(theme: theme.id, width: size.width, height: size.height, scale: scale)
         artLock.lock()
         let cached = artCache[key]
         artLock.unlock()
         if let cached { return cached }
 
         let (a, b, irisR, center) = geometry(size)
-        let set = ArtSet(skin: Art.skin(size: size, scale: scale, eyeCenter: center, a: a, b: b),
-                         sclera: Art.sclera(size: CGSize(width: a * 2, height: b * 2.8), scale: scale),
-                         iris: Art.iris(radius: irisR, scale: scale))
+        let set = ArtSet(skin: Art.skin(size: size, scale: scale, eyeCenter: center, a: a, b: b, theme: theme),
+                         sclera: Art.sclera(size: CGSize(width: a * 2, height: b * 2.8), scale: scale, theme: theme),
+                         iris: Art.iris(radius: irisR, scale: scale, theme: theme))
         artLock.lock()
         // A prévia redimensionável gera tamanhos novos a todo momento; não deixa acumular.
         if artCache.count >= 8 { artCache.removeAll() }
@@ -236,11 +255,12 @@ final class DragonEye {
         return set
     }
 
-    /// Desenha de antemão as imagens de um olho em tela cheia para cada monitor.
+    /// Desenha de antemão as imagens de um olho em tela cheia para cada monitor, no tema atual.
     static func prepare(screens: [NSScreen]) {
         let specs = screens.map { ($0.frame.size, $0.backingScaleFactor) }
+        let theme = Theme.current
         DispatchQueue.global(qos: .utility).async {
-            for (size, scale) in specs { _ = art(size: size, scale: scale) }
+            for (size, scale) in specs { _ = art(size: size, scale: scale, theme: theme) }
         }
     }
 
@@ -275,8 +295,8 @@ final class DragonEye {
             let dot = CALayer()
             dot.frame = CGRect(x: x, y: (dots.bounds.height - d) / 2, width: d, height: d)
             dot.cornerRadius = d / 2
-            dot.backgroundColor = rgb(0xff5a2a)
-            dot.shadowColor = rgb(0xff3000)
+            dot.backgroundColor = rgb(theme.accent)
+            dot.shadowColor = rgb(theme.glow)
             dot.shadowOpacity = 0.9
             dot.shadowRadius = d * 0.6
             dot.shadowOffset = .zero

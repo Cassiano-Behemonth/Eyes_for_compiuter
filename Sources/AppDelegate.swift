@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func applicationDidFinishLaunching(_ notification: Notification) {
         activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
                                                          reason: "Vigiando a câmera")
+        Theme.current = Theme.named(settings.theme)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu()
         menu.delegate = self
@@ -237,6 +238,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         cameraItem.submenu = cameraMenu
         menu.addItem(cameraItem)
 
+        let themeMenu = NSMenu()
+        for theme in Theme.all() {
+            themeMenu.addItem(MenuItem(theme.name, checked: theme.name == Theme.current.name) { [weak self] in
+                self?.setTheme(theme)
+            })
+        }
+        themeMenu.addItem(.separator())
+        themeMenu.addItem(MenuItem("Abrir pasta de temas…") {
+            try? FileManager.default.createDirectory(at: Theme.folder, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(Theme.folder)
+        })
+        let themeItem = NSMenuItem(title: "Tema", action: nil, keyEquivalent: "")
+        themeItem.submenu = themeMenu
+        menu.addItem(themeItem)
+
         menu.addItem(MenuItem("Espelhar câmera", checked: settings.mirror) { [weak self] in self?.settings.mirror.toggle() })
         menu.addItem(MenuItem("Modo teste (⌥⌘⎋ funciona bloqueado)", checked: settings.safeMode) { [weak self] in
             self?.settings.safeMode.toggle()
@@ -251,6 +267,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         })
         menu.addItem(.separator())
         menu.addItem(MenuItem("Sair do Eye", key: "q") { NSApp.terminate(nil) })
+    }
+
+    /// Escolher de novo o mesmo tema relê os arquivos (pra ver na hora o que mudou na pasta).
+    private func setTheme(_ theme: Theme) {
+        settings.theme = theme.name
+        Theme.current = theme
+        DragonEye.prepare(screens: NSScreen.screens)
+        previewEye?.eye.setTheme(theme)
     }
 
     func menuDidClose(_ menu: NSMenu) {
