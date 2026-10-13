@@ -35,7 +35,10 @@ final class LockOverlay {
     }
 
     func show() {
-        NSApp.setActivationPolicy(.regular)
+        // Precisa continuar como agente (sem ícone no Dock): o macOS só deixa janelas de apps
+        // agente entrarem no Space de outro app em tela cheia (vídeo, apresentação…).
+        // A prévia pode ter deixado o app como .regular.
+        NSApp.setActivationPolicy(.accessory)
         buildWindows()
 
         var options: NSApplication.PresentationOptions = [
@@ -48,6 +51,8 @@ final class LockOverlay {
         focus()
         NSCursor.hide()
         startTouchID()
+        // Depois de cobrir a tela: carregar o MediaRemote não pode atrasar o bloqueio.
+        DispatchQueue.main.async { Self.pauseMedia() }
 
         // Se outro app roubar o foco, pega de volta.
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
@@ -104,7 +109,7 @@ final class LockOverlay {
             window.alphaValue = 0
             window.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.6
+                ctx.duration = 0.15
                 window.animator().alphaValue = 1
             }
             windows.append(window)
@@ -251,6 +256,17 @@ final class LockOverlay {
         eyes = []
         NSApp.presentationOptions = []
         NSCursor.unhide()
-        NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Pausa o que estiver tocando (vídeo no navegador, Música, Spotify…) pelo MediaRemote,
+    /// o mesmo caminho da tecla ⏯. É "pausar", não "alternar": não liga nada que estava parado.
+    private static func pauseMedia() {
+        guard let bundle = CFBundleCreate(kCFAllocatorDefault,
+                                          URL(fileURLWithPath: "/System/Library/PrivateFrameworks/MediaRemote.framework") as CFURL),
+              let ptr = CFBundleGetFunctionPointerForName(bundle, "MRMediaRemoteSendCommand" as CFString)
+        else { return }
+        typealias SendCommand = @convention(c) (UInt32, CFDictionary?) -> Bool
+        let send = unsafeBitCast(ptr, to: SendCommand.self)
+        _ = send(1, nil)  // kMRPause
     }
 }

@@ -146,10 +146,8 @@ final class DragonEye {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        a = min(size.width * 0.36, size.height * 0.6)
-        b = a * 0.4
-        irisR = b * 1.32
-        center = CGPoint(x: size.width / 2, y: size.height * 0.52)
+        (a, b, irisR, center) = Self.geometry(size)
+        let art = Self.art(size: size, scale: scale)
 
         func setScale(_ l: CALayer) {
             l.contentsScale = scale
@@ -162,7 +160,7 @@ final class DragonEye {
         body.setAffineTransform(.identity)
         body.frame = root.bounds
         skin.frame = root.bounds
-        skin.contents = Art.skin(size: size, scale: scale, eyeCenter: center, a: a, b: b)
+        skin.contents = art.skin
 
         glow.frame = CGRect(x: center.x - a * 1.6, y: center.y - a * 1.0, width: a * 3.2, height: a * 2.0)
 
@@ -171,13 +169,13 @@ final class DragonEye {
 
         let eyeBox = CGRect(x: center.x - a, y: center.y - b * 1.4, width: a * 2, height: b * 2.8)
         sclera.frame = eyeBox
-        sclera.contents = Art.sclera(size: eyeBox.size, scale: scale)
+        sclera.contents = art.sclera
         upperShadow.frame = eyeBox
         lowerShadow.frame = eyeBox
 
         irisGroup.bounds = CGRect(x: 0, y: 0, width: irisR * 2, height: irisR * 2)
         irisGroup.position = center
-        iris.contents = Art.iris(radius: irisR, scale: scale)
+        iris.contents = art.iris
         pupil.shadowRadius = irisR * 0.06
 
         highlight.frame = CGRect(x: center.x - a * 0.5, y: center.y + b * 0.2, width: a * 0.42, height: b * 0.5)
@@ -192,6 +190,58 @@ final class DragonEye {
         dots.frame = CGRect(x: 0, y: size.height * 0.11, width: size.width, height: size.height * 0.03)
 
         step(now: CACurrentMediaTime())
+    }
+
+    private static func geometry(_ size: CGSize) -> (a: CGFloat, b: CGFloat, irisR: CGFloat, center: CGPoint) {
+        let a = min(size.width * 0.36, size.height * 0.6)
+        let b = a * 0.4
+        return (a, b, b * 1.32, CGPoint(x: size.width / 2, y: size.height * 0.52))
+    }
+
+    // MARK: - Imagens prontas
+
+    /// Desenhar pele, esclera e íris leva quase 1s numa tela Retina; o bloqueio não pode esperar isso.
+    /// `prepare` desenha antes (em segundo plano) e a tela de bloqueio só reaproveita.
+    private struct ArtSet {
+        let skin: CGImage
+        let sclera: CGImage
+        let iris: CGImage
+    }
+
+    private struct ArtKey: Hashable {
+        let width: CGFloat
+        let height: CGFloat
+        let scale: CGFloat
+    }
+
+    private static let artLock = NSLock()
+    private static var artCache: [ArtKey: ArtSet] = [:]
+
+    private static func art(size: CGSize, scale: CGFloat) -> ArtSet {
+        let key = ArtKey(width: size.width, height: size.height, scale: scale)
+        artLock.lock()
+        let cached = artCache[key]
+        artLock.unlock()
+        if let cached { return cached }
+
+        let (a, b, irisR, center) = geometry(size)
+        let set = ArtSet(skin: Art.skin(size: size, scale: scale, eyeCenter: center, a: a, b: b),
+                         sclera: Art.sclera(size: CGSize(width: a * 2, height: b * 2.8), scale: scale),
+                         iris: Art.iris(radius: irisR, scale: scale))
+        artLock.lock()
+        // A prévia redimensionável gera tamanhos novos a todo momento; não deixa acumular.
+        if artCache.count >= 8 { artCache.removeAll() }
+        artCache[key] = set
+        artLock.unlock()
+        return set
+    }
+
+    /// Desenha de antemão as imagens de um olho em tela cheia para cada monitor.
+    static func prepare(screens: [NSScreen]) {
+        let specs = screens.map { ($0.frame.size, $0.backingScaleFactor) }
+        DispatchQueue.global(qos: .utility).async {
+            for (size, scale) in specs { _ = art(size: size, scale: scale) }
+        }
     }
 
     // MARK: - Ações

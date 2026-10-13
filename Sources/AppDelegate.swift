@@ -17,8 +17,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var lastFrame = Date.distantPast
     private var cameraError: String?
     private var systemLocked = false
+    /// Impede o App Nap de atrasar a câmera e os timers enquanto o Eye fica só na barra de menus.
+    private var activity: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                         reason: "Vigiando a câmera")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu()
         menu.delegate = self
@@ -30,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self?.cameraError = msg
             self?.updateIcon()
         }
+        // Câmera caiu e outra assumiu (ou a escolhida voltou): recomeça a contagem de ausência.
+        detector.onSwitch = { [weak self] _ in self?.lastSeen = Date() }
         detector.start(cameraID: settings.cameraID)
 
         let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in self?.evaluate() }
@@ -37,6 +43,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         timer = t
 
         observeSystem()
+
+        // Deixa o olho de cada monitor desenhado para o bloqueio aparecer na hora.
+        DragonEye.prepare(screens: NSScreen.screens)
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                               object: nil, queue: .main) { _ in
+            DragonEye.prepare(screens: NSScreen.screens)
+        }
 
         let args = CommandLine.arguments
         if args.contains("--preview") { showPreview() }
@@ -66,6 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         overlay?.track(point, closeness: closeness)
         previewEye?.eye.target = point
         previewEye?.eye.closeness = closeness
+        // Confere já, sem esperar o próximo tique do timer.
+        evaluate()
     }
 
     private var cameraLive: Bool { Date().timeIntervalSince(lastFrame) < 2 }
@@ -209,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         let cameraMenu = NSMenu()
         let cameras = PresenceDetector.cameras()
-        let current = settings.cameraID ?? cameras.first { $0.deviceType == .builtInWideAngleCamera }?.uniqueID
+        let current = detector.activeID ?? settings.cameraID ?? cameras.first { $0.deviceType == .builtInWideAngleCamera }?.uniqueID
         for device in cameras {
             cameraMenu.addItem(MenuItem(device.localizedName, checked: device.uniqueID == current) { [weak self] in
                 guard let self else { return }
