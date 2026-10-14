@@ -99,58 +99,60 @@ Para ver um tema sem abrir nada (o `--tema` vem antes do `--snapshot`):
 
 Para conferir a arte sem abrir nada: `build/Eye.app/Contents/MacOS/Eye --snapshot olho.png -0.5,0.2`
 
-## Windows
+## Windows (Protetor de Tela)
 
-**Ainda não existe versão para Windows.** O código daqui é todo nativo do macOS (AppKit, AVFoundation, Vision,
-OpenDirectory, Touch ID) e não compila no Windows. Fazer o Eye no Windows é escrever um app novo.
+A versão para Windows foi adaptada com motor procedural acelerado por hardware (Canvas 2D/Direct2D) e suporte nativo ao sistema operacional.
 
-### Como fazer o port
+### Como Rodar no Windows
 
-Quem for fazer (pessoa ou IA) **não deve traduzir este código arquivo por arquivo**. O caminho é:
+Você tem duas formas simples de rodar:
 
-1. **Analisar primeiro.** Ler os fontes em `Sources/` e entender *o que* o Eye faz e *por quê*. Muitas decisões aqui
-   resolvem problemas que são do macOS (App Nap, Spaces de tela cheia, o diálogo do Touch ID ficar escondido atrás
-   da janela) e não existem no Windows. O Windows tem os problemas dele, que o Mac não tem.
-2. **Pensar a estrutura do zero.** Com o comportamento entendido, desenhar a arquitetura que faz mais sentido no
-   Windows: linguagem, framework de interface, como dividir em módulos, o que dá pra compartilhar entre os dois
-   sistemas. Não copiar a estrutura do Mac só porque ela existe; se aparecer um jeito melhor, ele vale (e pode até
-   voltar para a versão Mac depois).
-3. **Escrever a proposta antes do código.** Um documento curto com a estrutura escolhida, as alternativas
-   descartadas e o motivo, e os riscos. Depois disso, implementar.
+1. **Execução Imediata (1 clique):**
+   - Dê dois cliques em `iniciar.bat`
+   - O olho da criatura abrirá instantaneamente em tela cheia na resolução máxima do seu monitor (Full HD, 2K, 4K).
+   - *Alternativa via terminal:* `python app.py`
 
-### O que o Eye precisa fazer (o comportamento, não o código)
+2. **Como Protetor de Tela Oficial do Windows (`.scr`):**
+   - O arquivo `Eye.scr` já vem compilado na raiz do projeto.
+   - Dê dois cliques em `instalar_protetor_de_tela.bat`, ou clique com o botão direito em `Eye.scr` e selecione **"Instalar"** ou **"Testar"**.
+   - Para recompilar quando quiser: execute `compilar_scr.bat`.
 
-- Ficar na bandeja do sistema, sem janela, com um menu com as mesmas opções do Mac
-- Ler a webcam ~10x por segundo, achar rosto (presença) e a posição da pessoa (pra onde o olho olha)
-- Sem rosto por X segundos → bloquear. Sem imagem da câmera → **nunca** bloquear
-- Trocar de câmera sozinho se a escolhida for desconectada, e voltar quando ela reconectar
-- Tela de bloqueio em **todos** os monitores, por cima de tudo (inclusive vídeo em tela cheia), aparecendo na hora
-- O olho animado: segue a pessoa, pisca, contrai a pupila de perto, fica com raiva com senha errada, respira
-- Sair só com a senha do usuário (ou biometria); pausar a mídia que estiver tocando
-- Temas no **mesmo formato** da versão Mac (`tema.json` + `iris.png`/`esclera.png`/`pele.png`), pra um tema funcionar nos dois
+---
 
-### Pontos de partida no Windows (pra analisar, não pra seguir à risca)
+### Comportamento Interativo e Menu de "Tema"
 
-| Peça | Opções no Windows |
-|------|-------------------|
-| Câmera | `Windows.Media.Capture` (WinRT), Media Foundation, OpenCV |
-| Rosto | `Windows.Media.FaceAnalysis.FaceDetector` (já vem no Windows), OpenCV DNN, MediaPipe |
-| Olho animado | Win2D / Direct2D, WinUI 3 / WPF com composição, ou um motor 2D |
-| Tela de bloqueio | janela sem borda `WS_EX_TOPMOST` por monitor + hook de teclado de baixo nível pra engolir Win, Alt+Tab etc. |
-| Senha | `LogonUser` (senha do Windows) ou Windows Hello via `UserConsentVerifier` |
-| Pausar mídia | `GlobalSystemMediaTransportControlsSessionManager` |
-| Bandeja e inicialização | `NotifyIcon` / `Shell_NotifyIcon`; chave `Run` no registro ou pasta Inicializar |
+- **Ao mexer o mouse:**
+  - O cursor aparece e a pupila da criatura segue o movimento do seu mouse suavemente pela tela.
+  - Um menu flutuante elegante com a opção **"Tema / Criatura"** surge no topo da tela.
+  - Clicando no menu, você pode alternar na hora a criatura exposta:
+    - 🐉 **Dragão** (O clássico réptil de fogo)
+    - ❄️ **Gelo** (Wyrm das neves cristalino)
+    - 🐍 **Veneno** (Basilisco com sangue ácido esmeralda)
+    - 🌑 **Sombra** (Entidade abissal do vazio)
+    - 🌋 **Lava** (Criatura de magma incandescente)
+    - ✨ **Ouro** (Dragão celestial dourado)
+    - *Ou qualquer tema criado por você!*
+- **Ocultamento automático:**
+  - Se você parar de mexer o mouse por alguns segundos (~3,5 segundos), o menu de tema e o cursor desaparecem suavemente.
+  - A tela volta ao modo imersivo e hipnótico de protetor de tela, onde a criatura continua respirando, piscando suas pálpebras amendoadas e observando os arredores.
+- **Vigilância por Webcam (opcional):**
+  - No menu superior, clique no ícone de câmera (📷) para que o dragão passe a rastrear você pela webcam.
 
-Uma diferença importante pra decidir na análise: no Windows nenhum app consegue bloquear **Ctrl+Alt+Del**, que
-sempre abre a tela segura do sistema. Ou seja, a tela do Eye sozinha nunca vai ser um bloqueio de verdade. Vale
-pensar se o certo é o olho ser só a cara do bloqueio e chamar o bloqueio real do Windows (`LockWorkStation`) por
-baixo, ou outra solução.
+---
 
-### Pedido pronto para uma IA (ex.: Claude Code no Windows)
+### Como Inserir Novos Temas no Windows
 
-> Leia este repositório inteiro, principalmente `README.md` e `Sources/`. Ele é um app de macOS. Quero uma versão
-> para Windows. Não traduza arquivo por arquivo: primeiro analise o que o app faz e por quê, depois pense por
-> conta própria na estrutura mais interessante para o Windows (linguagem, framework, módulos, o que pode ser
-> compartilhado com a versão Mac). Escreva a proposta em `windows/PROPOSTA.md` com a estrutura, as alternativas
-> que você descartou e os riscos (inclusive Ctrl+Alt+Del). Os temas precisam usar o mesmo formato da seção
-> "Temas" do README. Só comece a implementar depois de eu aprovar a proposta.
+Todos os temas do Windows ficam organizados na pasta:
+```
+Temas/
+```
+
+Para adicionar uma nova criatura:
+1. Crie uma pasta dentro de `Temas/` com o nome da criatura desejada (ex: `Temas/Dragao_Esmeralda/`).
+2. Crie um arquivo `tema.json` dentro dessa pasta.
+3. Se quiser usar ilustrações próprias, pode colocar opcionalmente:
+   - `iris.png` (textura da íris)
+   - `esclera.png` (textura do fundo do olho)
+   - `pele.png` (textura do fundo de pele/escamas)
+4. Ao mexer o mouse no protetor de tela, sua nova criatura aparecerá automaticamente na lista de temas!
+5. Veja o guia passo a passo em [Temas/README_TEMAS.md](Temas/README_TEMAS.md).

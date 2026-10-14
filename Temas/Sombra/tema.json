@@ -1,0 +1,10 @@
+{
+  "base": "Sombra",
+  "iris": ["#ffe0ff", "#e0a0ff", "#b050ff", "#7a10e0", "#3a0680", "#12002a"],
+  "fibras": ["#f0c0ff", "#a040ff", "#1a0030"],
+  "esclera": ["#3a0a5e", "#1e0436", "#0a0112"],
+  "veias": "#140024",
+  "escamas": "#3a1a61",
+  "brilho": "#b040ff",
+  "destaque": "#c070ff"
+}

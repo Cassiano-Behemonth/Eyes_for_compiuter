@@ -1,2 +1,9 @@
 build/
 .DS_Store
+__pycache__/
+*.pyc
+.eye_instance.lock
+*.log
+test_*.jpg
+*test*.jpg
+*.tmp

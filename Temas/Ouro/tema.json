@@ -1,0 +1,10 @@
+{
+  "base": "Dragão",
+  "iris": ["#ffffff", "#fffbb0", "#ffd700", "#d4af37", "#aa7a1e", "#3a2500"],
+  "fibras": ["#ffffff", "#ffe066", "#664400"],
+  "esclera": ["#4a3800", "#241c00", "#0d0a00"],
+  "veias": "#ffd700",
+  "escamas": "#2b220c",
+  "brilho": "#ffe066",
+  "destaque": "#ffd700"
+}

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eye — Protetor de Tela Windows</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Container do Canvas do Olho da Criatura -->
+  <div id="canvas-container">
+    <canvas id="eyeCanvas"></canvas>
+  </div>
+
+  <!-- HUD Flutuante Superior (aparece ao mexer o mouse) -->
+  <div id="hud" class="hidden">
+    <!-- Botão de Escolha de Tema -->
+    <button id="themeTriggerBtn" class="theme-trigger-btn" title="Alterar Criatura / Tema">
+      <span class="icon" id="currentThemeIcon">🐉</span>
+      <span id="currentThemeName">Dragão</span>
+      <span class="caret">▼</span>
+    </button>
+
+    <div class="hud-divider"></div>
+
+    <!-- Indicador de Status da Câmera -->
+    <div id="cameraStatusPill" class="camera-status-pill" title="Sensor de Presença Facial">
+      <span class="status-dot" id="cameraStatusDot"></span>
+      <span id="cameraStatusText">Webcam: Conectando...</span>
+    </div>
+
+    <!-- Botão Prévia da Câmera (PIP) -->
+    <button id="btnCameraPreview" class="hud-btn" title="Exibir/Ocultar Prévia da Câmera em Tempo Real">
+      📷
+    </button>
+
+    <div class="hud-divider"></div>
+
+    <!-- Botão Pasta de Temas -->
+    <button id="btnOpenFolder" class="hud-btn" title="Abrir pasta de Temas no Windows">
+      📁
+    </button>
+
+    <!-- Botão Guia / Adicionar Tema -->
+    <button id="btnGuide" class="hud-btn" title="Como inserir novos temas">
+      ➕
+    </button>
+
+    <!-- Botão Tela Cheia -->
+    <button id="btnFullscreen" class="hud-btn" title="Alternar Tela Cheia (F11)">
+      ⛶
+    </button>
+
+    <!-- Botão Sair -->
+    <button id="btnClose" class="hud-btn" title="Sair do protetor">
+      ✕
+    </button>
+  </div>
+
+  <!-- Mini Janela Flutuante de Prévia da Câmera (PIP) -->
+  <div id="cameraPipBox" class="camera-pip-box hidden">
+    <div class="pip-header">
+      <span>📷 Visão da Criatura</span>
+      <button id="btnClosePip" class="pip-close-btn">✕</button>
+    </div>
+    <img id="cameraPipImg" class="pip-img" src="" alt="Câmera" />
+    <div class="pip-footer" id="pipFooterText">Rastreando rosto em tempo real...</div>
+  </div>
+
+  <!-- Modal / Gaveta de Seleção de Criaturas -->
+  <div id="theme-modal" class="hidden">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">
+          <span>👁️</span> Escolha a Criatura
+        </div>
+        <div class="modal-subtitle">Selecione o olho vigilante exposto no protetor de tela</div>
+      </div>
+      <button id="btnCloseModal" class="hud-btn" style="padding: 4px;">✕</button>
+    </div>
+
+    <!-- Grid com as Criaturas -->
+    <div class="creature-grid" id="creatureGrid">
+      <!-- Inserido dinamicamente via JS -->
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnFooterFolder" class="footer-btn">
+        <span>📁</span> Abrir Pasta "Temas"
+      </button>
+      <button id="btnFooterNewTheme" class="footer-btn">
+        <span>🎨</span> Como Criar Novo Tema
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal Tutorial de Criação de Temas -->
+  <div id="guide-modal" class="hidden">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>🎨</span> Como Inserir Novos Temas
+      </div>
+      <button id="btnCloseGuide" class="hud-btn">✕</button>
+    </div>
+
+    <div class="guide-step">
+      <h4>1. Crie uma pasta dentro de <code>Temas/</code></h4>
+      <p>O nome da pasta será o nome da criatura exibido aqui na lista (ex: <code>Temas/Monstro_Cosmico</code>).</p>
+    </div>
+
+    <div class="guide-step">
+      <h4>2. Crie o arquivo <code>tema.json</code> dentro da pasta</h4>
+      <p>Configure as cores que você deseja para a íris, fibras, escamas e veias:</p>
+      <code class="guide-code">
+{
+  "base": "Dragão",
+  "iris": ["#ffffff", "#00ffff", "#0088ff", "#000044"],
+  "fibras": ["#b0ffff", "#00aaff", "#001144"],
+  "esclera": ["#001122", "#000511"],
+  "veias": "#00ffff",
+  "escamas": "#002244",
+  "brilho": "#00ccff",
+  "destaque": "#00eeff"
+}
+      </code>
+    </div>
+
+    <div class="guide-step">
+      <h4>3. (Opcional) Adicione texturas em PNG</h4>
+      <p>Se quiser usar artes próprias desenhadas:</p>
+      <p>• <code>iris.png</code>: textura quadrada para a íris.</p>
+      <p>• <code>esclera.png</code>: fundo do olho.</p>
+      <p>• <code>pele.png</code>: fundo da tela inteira no lugar das escamas.</p>
+    </div>
+
+    <div class="guide-step" style="border-left-color: #00e699;">
+      <h4>4. Recarregue no Protetor de Tela</h4>
+      <p>Ao mexer o mouse, sua nova criatura já estará disponível imediatamente no menu!</p>
+    </div>
+
+    <div style="text-align: right; margin-top: 16px;">
+      <button id="btnOpenFolderFromGuide" class="footer-btn" style="display: inline-flex;">
+        Abrir Pasta "Temas" no Explorador de Arquivos 📁
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast de Notificação -->
+  <div id="toast"></div>
+
+  <!-- Scripts -->
+  <script src="themes.js"></script>
+  <script src="eye.js"></script>
+  <script>
+    (async function() {
+      const canvas = document.getElementById('eyeCanvas');
+      const hud = document.getElementById('hud');
+      const themeModal = document.getElementById('theme-modal');
+      const guideModal = document.getElementById('guide-modal');
+      const themeTriggerBtn = document.getElementById('themeTriggerBtn');
+      const currentThemeName = document.getElementById('currentThemeName');
+      const currentThemeIcon = document.getElementById('currentThemeIcon');
+      const creatureGrid = document.getElementById('creatureGrid');
+      const toast = document.getElementById('toast');
+      const cameraStatusDot = document.getElementById('cameraStatusDot');
+      const cameraStatusText = document.getElementById('cameraStatusText');
+      const cameraPipBox = document.getElementById('cameraPipBox');
+      const cameraPipImg = document.getElementById('cameraPipImg');
+
+      // Inicializa o gerenciador de temas e o motor gráfico
+      await window.ThemeManager.loadThemes();
+      const engine = new CreatureEyeEngine(canvas);
+      engine.start();
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2600);
+      }
+
+      function updateThemeGlow(theme) {
+        document.documentElement.style.setProperty('--theme-glow', theme.brilho);
+        currentThemeName.textContent = theme.name;
+        currentThemeIcon.textContent = theme.icon || '👁️';
+      }
+      updateThemeGlow(window.ThemeManager.current);
+
+      // Renderiza os cards das criaturas no modal
+      function renderCreatureCards() {
+        creatureGrid.innerHTML = '';
+        const allThemes = window.ThemeManager.allThemes;
+        const currentName = window.ThemeManager.current.name;
+
+        for (const [key, theme] of Object.entries(allThemes)) {
+          const card = document.createElement('div');
+          card.className = 'creature-card' + (key === currentName ? ' active' : '');
+          card.style.setProperty('--card-glow', theme.brilho || '#ff7a00');
+
+          const swatches = (theme.iris || []).slice(0, 4).map(c => 
+            `<div class="swatch-dot" style="background: ${c};"></div>`
+          ).join('');
+
+          card.innerHTML = `
+            <div class="creature-card-top">
+              <span class="creature-card-icon">${theme.icon || '👁️'}</span>
+              <div class="color-swatches">${swatches}</div>
+            </div>
+            <div class="creature-card-name">${theme.name}</div>
+            <div class="creature-card-desc">${theme.description || 'Criatura viva protetora.'}</div>
+          `;
+
+          card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const selected = window.ThemeManager.selectTheme(key);
+            if (selected) {
+              engine.setTheme(selected);
+              updateThemeGlow(selected);
+              renderCreatureCards();
+              showToast(`Criatura alterada para: ${selected.name}`);
+              setTimeout(() => {
+                themeModal.classList.add('hidden');
+                themeTriggerBtn.classList.remove('active');
+              }, 250);
+            }
+          });
+
+          creatureGrid.appendChild(card);
+        }
+      }
+      renderCreatureCards();
+
+      // ================= SENSOR DE WEBCAM (PRESENÇA E VISÃO) =================
+      // O olho segue UNICAMENTE a detecção facial da webcam. O mouse não interfere no olhar.
+      const SERVER_URL = window.location.protocol.startsWith('http') ? '' : 'http://127.0.0.1:54321';
+      window.SERVER_URL = SERVER_URL;
+
+      let lastWebcamSighting = null;
+      let pythonServerConnected = false;
+      let pollActive = true;
+
+      async function startPresenceLoop() {
+        cameraStatusDot.className = 'status-dot';
+        cameraStatusText.textContent = 'Webcam: Conectando...';
+
+        const endpoint = (SERVER_URL || '') + '/api/presence';
+
+        while (pollActive) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 1200);
+            const resp = await fetch(endpoint + '?t=' + Date.now(), {
+              cache: 'no-store',
+              signal: controller.signal
+            });
+            clearTimeout(timer);
+
+            if (resp.ok) {
+              const data = await resp.json();
+              pythonServerConnected = true;
+              handlePresenceUpdate(data);
+            } else {
+              handlePresenceUpdate({ camera_active: false, detected: false, server_offline: true });
+            }
+          } catch (err) {
+            handlePresenceUpdate({ camera_active: false, detected: false, server_offline: true });
+          }
+
+          // Atualização contínua e suave (~30 FPS)
+          await new Promise(r => setTimeout(r, 33));
+        }
+      }
+
+      function handlePresenceUpdate(data) {
+        if (!data || data.server_offline) {
+          cameraStatusDot.className = 'status-dot inactive';
+          cameraStatusText.textContent = 'Servidor Reconectando...';
+          engine.clearLookTarget();
+          return;
+        }
+
+        if (!data.camera_active) {
+          cameraStatusDot.className = 'status-dot inactive';
+          cameraStatusText.textContent = 'Webcam Não Detectada';
+          engine.clearLookTarget();
+          return;
+        }
+
+        if (data.detected) {
+          cameraStatusDot.className = 'status-dot active';
+          const px = Math.round(data.x * 100);
+          const py = Math.round(data.y * 100);
+          cameraStatusText.textContent = `Webcam: Rosto Conectado (${px > 0 ? '+' : ''}${px}%, ${py > 0 ? '+' : ''}${py}%)`;
+          lastWebcamSighting = data;
+          engine.setLookTarget(data.x, data.y, data.closeness);
+        } else {
+          cameraStatusDot.className = 'status-dot';
+          cameraStatusText.textContent = 'Webcam: Procurando Rosto...';
+          lastWebcamSighting = null;
+          engine.clearLookTarget();
+        }
+      }
+
+      startPresenceLoop();
+
+      // ================= GERENCIAMENTO DE MOUSE E AUTO-HIDE =================
+      // O mouse é usado EXCLUSIVAMENTE para interagir com o menu HUD e trocar temas.
+      // Ele NUNCA move o olho da criatura.
+      let hideTimeout = null;
+      let isInteractingWithMenu = false;
+
+      function showHud() {
+        hud.classList.remove('hidden');
+        document.body.classList.remove('idle');
+
+        clearTimeout(hideTimeout);
+        // Oculta após 3.5 segundos sem mexer o mouse
+        hideTimeout = setTimeout(() => {
+          if (!isInteractingWithMenu && themeModal.classList.contains('hidden') && guideModal.classList.contains('hidden')) {
+            hud.classList.add('hidden');
+            document.body.classList.add('idle');
+          }
+        }, 3500);
+      }
+
+      // Ao mexer o mouse: apenas exibe a barra de opções de tema e botões
+      window.addEventListener('mousemove', () => {
+        showHud();
+      });
+
+      hud.addEventListener('mouseenter', () => { isInteractingWithMenu = true; });
+      hud.addEventListener('mouseleave', () => { isInteractingWithMenu = false; showHud(); });
+      themeModal.addEventListener('mouseenter', () => { isInteractingWithMenu = true; });
+      themeModal.addEventListener('mouseleave', () => { isInteractingWithMenu = false; showHud(); });
+
+      // Mostra o HUD no início por 4 segundos
+      showHud();
+
+      // ================= AÇÕES DOS BOTÕES =================
+      themeTriggerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = themeModal.classList.contains('hidden');
+        if (willOpen) {
+          renderCreatureCards();
+          themeModal.classList.remove('hidden');
+          themeTriggerBtn.classList.add('active');
+          guideModal.classList.add('hidden');
+        } else {
+          themeModal.classList.add('hidden');
+          themeTriggerBtn.classList.remove('active');
+        }
+      });
+
+      document.getElementById('btnCloseModal').addEventListener('click', () => {
+        themeModal.classList.add('hidden');
+        themeTriggerBtn.classList.remove('active');
+      });
+
+      window.addEventListener('click', (e) => {
+        if (!themeModal.contains(e.target) && !themeTriggerBtn.contains(e.target)) {
+          themeModal.classList.add('hidden');
+          themeTriggerBtn.classList.remove('active');
+        }
+      });
+
+      // Botão Prévia da Câmera (PIP)
+      document.getElementById('btnCameraPreview').addEventListener('click', () => {
+        const isHidden = cameraPipBox.classList.contains('hidden');
+        if (isHidden) {
+          cameraPipImg.src = SERVER_URL + '/api/camera_feed?t=' + Date.now();
+          cameraPipBox.classList.remove('hidden');
+          showToast('📷 Prévia da câmera aberta');
+        } else {
+          cameraPipBox.classList.add('hidden');
+          cameraPipImg.src = '';
+        }
+      });
+
+      document.getElementById('btnClosePip').addEventListener('click', () => {
+        cameraPipBox.classList.add('hidden');
+        cameraPipImg.src = '';
+      });
+
+      async function openThemesFolder() {
+        try {
+          const resp = await fetch(SERVER_URL + '/api/abrir-pasta', { method: 'POST' });
+          if (resp.ok) {
+            showToast('Pasta "Temas" aberta no Windows!');
+            return;
+          }
+        } catch (_) {}
+        guideModal.classList.remove('hidden');
+        themeModal.classList.add('hidden');
+      }
+
+      document.getElementById('btnOpenFolder').addEventListener('click', openThemesFolder);
+      document.getElementById('btnFooterFolder').addEventListener('click', openThemesFolder);
+      document.getElementById('btnOpenFolderFromGuide').addEventListener('click', openThemesFolder);
+
+      document.getElementById('btnGuide').addEventListener('click', () => {
+        guideModal.classList.remove('hidden');
+        themeModal.classList.add('hidden');
+      });
+      document.getElementById('btnFooterNewTheme').addEventListener('click', () => {
+        guideModal.classList.remove('hidden');
+        themeModal.classList.add('hidden');
+      });
+      document.getElementById('btnCloseGuide').addEventListener('click', () => {
+        guideModal.classList.add('hidden');
+      });
+
+      document.getElementById('btnFullscreen').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      document.getElementById('btnClose').addEventListener('click', () => {
+        window.close();
+      });
+
+      window.addEventListener('keydown', (e) => {
+        showHud();
+        if (e.key === 'Escape') {
+          themeModal.classList.add('hidden');
+          guideModal.classList.add('hidden');
+          cameraPipBox.classList.add('hidden');
+        }
+        if (e.key === 't' || e.key === 'T') {
+          themeTriggerBtn.click();
+        }
+        if (e.key === 'c' || e.key === 'C') {
+          document.getElementById('btnCameraPreview').click();
+        }
+        if (e.key === 'f' || e.key === 'F11') {
+          if (e.key === 'f') {
+            document.getElementById('btnFullscreen').click();
+          }
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        engine.onResize();
+      });
+
+    })();
+  </script>
+</body>
+</html>

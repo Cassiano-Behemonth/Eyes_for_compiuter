@@ -1,0 +1,10 @@
+{
+  "base": "Veneno",
+  "iris": ["#f6ffb0", "#c8ff3a", "#6ee00a", "#1a9a00", "#0a4a05", "#021a00"],
+  "fibras": ["#e0ff6a", "#4ac000", "#0a2a00"],
+  "esclera": ["#2a5a06", "#143a02", "#041200"],
+  "veias": "#0a2000",
+  "escamas": "#1f4a12",
+  "brilho": "#6aff1a",
+  "destaque": "#9aff4a"
+}

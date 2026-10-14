@@ -1,0 +1,10 @@
+{
+  "base": "Gelo",
+  "iris": ["#f4ffff", "#b8f0ff", "#5ac8ff", "#1a78e0", "#0a2f8a", "#020a2a"],
+  "fibras": ["#d8f8ff", "#3aa0ff", "#001030"],
+  "esclera": ["#0e3a6e", "#06203a", "#010612"],
+  "veias": "#000a2a",
+  "escamas": "#1a3f61",
+  "brilho": "#3aa8ff",
+  "destaque": "#6ac8ff"
+}
