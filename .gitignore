@@ -7,3 +7,4 @@ __pycache__/
 test_*.jpg
 *test*.jpg
 *.tmp
+eye_config.json

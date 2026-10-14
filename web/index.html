@@ -37,6 +37,12 @@
 
     <div class="hud-divider"></div>
 
+    <!-- Bloqueio do Windows por ausência -->
+    <button id="btnLockWatch" class="hud-btn lock-toggle" title="Bloquear o Windows quando ninguém aparecer na câmera">🔓</button>
+    <select id="lockAfterSelect" class="lock-select" title="Tempo sem rosto até bloquear"></select>
+
+    <div class="hud-divider"></div>
+
     <!-- Botão Pasta de Temas -->
     <button id="btnOpenFolder" class="hud-btn" title="Abrir pasta de Temas no Windows">
       📁
@@ -302,6 +308,51 @@
       }
 
       startPresenceLoop();
+
+      // ================= BLOQUEIO POR AUSÊNCIA =================
+      const btnLockWatch = document.getElementById('btnLockWatch');
+      const lockSelect = document.getElementById('lockAfterSelect');
+      let lockCfg = { watch: false, lock_after: 30 };
+
+      function fmtSecs(n) {
+        if (n < 60) return n + 's';
+        if (n % 60 === 0) return (n / 60) + ' min';
+        return Math.floor(n / 60) + 'min ' + (n % 60) + 's';
+      }
+      function renderLockCfg() {
+        btnLockWatch.textContent = lockCfg.watch ? '🔒' : '🔓';
+        btnLockWatch.classList.toggle('on', lockCfg.watch);
+        lockSelect.value = String(lockCfg.lock_after);
+      }
+      async function saveLockCfg(patch) {
+        try {
+          const r = await fetch((SERVER_URL || '') + '/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch)
+          });
+          if (r.ok) { lockCfg = { ...lockCfg, ...(await r.json()) }; renderLockCfg(); return true; }
+        } catch (e) {}
+        showToast('Não foi possível salvar (servidor offline).');
+        return false;
+      }
+      try {
+        const r = await fetch((SERVER_URL || '') + '/api/config', { cache: 'no-store' });
+        const c = await r.json();
+        lockCfg = { watch: c.watch, lock_after: c.lock_after };
+        const opts = c.options.includes(c.lock_after) ? c.options : [...c.options, c.lock_after].sort((a, b) => a - b);
+        lockSelect.innerHTML = opts.map(o => `<option value="${o}">${fmtSecs(o)}</option>`).join('');
+        renderLockCfg();
+      } catch (e) {
+        btnLockWatch.disabled = lockSelect.disabled = true;
+      }
+      btnLockWatch.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (await saveLockCfg({ watch: !lockCfg.watch })) {
+          showToast(lockCfg.watch ? `Vigiando: bloqueia após ${fmtSecs(lockCfg.lock_after)} sem rosto` : 'Bloqueio automático desligado');
+        }
+      });
+      lockSelect.addEventListener('change', () => saveLockCfg({ lock_after: parseInt(lockSelect.value, 10) }));
 
       // ================= GERENCIAMENTO DE MOUSE E AUTO-HIDE =================
       // O mouse é usado EXCLUSIVAMENTE para interagir com o menu HUD e trocar temas.

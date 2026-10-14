@@ -95,6 +95,7 @@ class WebcamPresenceTracker:
         }
         self.debug_info = {}
         self.thread = None
+        self.last_demand = 0.0
 
     def start(self):
         if self.running:
@@ -110,6 +111,19 @@ class WebcamPresenceTracker:
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
         self._release_camera()
+
+    def touch(self):
+        """Chamado por quem está vendo a câmera (página do olho). Mantém a câmera aberta por mais alguns segundos."""
+        self.last_demand = time.time()
+
+    def _wanted(self):
+        """A câmera só fica aberta com a vigia ligada ou com a página do olho aberta."""
+        try:
+            if config["watch"]:
+                return True
+        except NameError:
+            pass
+        return time.time() - self.last_demand < 5.0
 
     def _release_camera(self):
         if self.cap:
@@ -213,13 +227,22 @@ class WebcamPresenceTracker:
         import cv2
         import numpy as np
 
-        self._init_camera()
-
         last_check = 0.0
         consecutive_failures = 0
         black_frame_count = 0
 
         while self.running:
+            if not self._wanted():
+                if self.cap:
+                    self._release_camera()
+                    print("[INFO] Câmera liberada (nada precisa dela agora).", flush=True)
+                    with self.lock:
+                        self.current_presence["camera_active"] = False
+                        self.current_presence["detected"] = False
+                        self.last_jpeg = None
+                time.sleep(0.25)
+                continue
+
             if not self.cap or not self.cap.isOpened():
                 time.sleep(1.0)
                 if self.running:
@@ -358,6 +381,123 @@ tracker.start()
 atexit.register(tracker.stop)
 
 
+# ================= BLOQUEIO POR AUSÊNCIA =================
+
+CONFIG_PATH = os.path.join(BASE_DIR, "eye_config.json")
+LOCK_OPTIONS = [1, 3, 5, 10, 15, 30, 60, 120, 300, 600, 1800]
+DEFAULT_CONFIG = {"watch": False, "lock_after": 30}
+config_lock = threading.Lock()
+
+
+def _sanitize_config(raw):
+    cfg = dict(DEFAULT_CONFIG)
+    if isinstance(raw, dict):
+        if isinstance(raw.get("watch"), bool):
+            cfg["watch"] = raw["watch"]
+        try:
+            secs = int(raw.get("lock_after", cfg["lock_after"]))
+            cfg["lock_after"] = max(1, min(secs, 24 * 3600))
+        except (TypeError, ValueError):
+            pass
+    return cfg
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return _sanitize_config(json.load(f))
+    except (OSError, ValueError):
+        return dict(DEFAULT_CONFIG)
+
+
+config = load_config()
+
+
+def update_config(raw):
+    global config
+    with config_lock:
+        merged = dict(config)
+        merged.update(raw if isinstance(raw, dict) else {})
+        config = _sanitize_config(merged)
+        try:
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(config, f)
+        except OSError as e:
+            print(f"[!] Não consegui salvar a configuração: {e}", flush=True)
+        return dict(config)
+
+
+def lock_workstation():
+    import ctypes
+    ctypes.windll.user32.LockWorkStation()
+
+
+def screensaver_is_secure():
+    """True se o Eye.scr é o protetor ativo e o Windows pede senha ao sair dele."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop") as k:
+            def val(name):
+                try:
+                    return str(winreg.QueryValueEx(k, name)[0])
+                except OSError:
+                    return ""
+            return (os.path.basename(val("SCRNSAVE.EXE")).lower() == "eye.scr"
+                    and val("ScreenSaveActive") == "1"
+                    and val("ScreenSaverIsSecure") == "1")
+    except OSError:
+        return False
+
+
+def trigger_lock():
+    """Mostra o olho (protetor de tela seguro: ao sair, o Windows pede a senha).
+    Se o protetor não estiver configurado como seguro, bloqueia o Windows direto."""
+    import ctypes
+    if screensaver_is_secure():
+        HWND_BROADCAST, WM_SYSCOMMAND, SC_SCREENSAVE = 0xFFFF, 0x0112, 0xF140
+        if ctypes.windll.user32.PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_SCREENSAVE, 0):
+            return
+    lock_workstation()
+
+
+def _absence_watcher():
+    """Bloqueia o Windows se a webcam estiver ativa e nenhum rosto aparecer por `lock_after` segundos."""
+    armed = False          # só bloqueia depois de ter visto um rosto desde o último bloqueio
+    absent_since = None
+    while True:
+        time.sleep(0.25)
+        with config_lock:
+            cfg = dict(config)
+        pres = tracker.get_presence()
+        now = time.time()
+        # Sem imagem da câmera (desligada, ocupada, travada): nunca bloqueia
+        cam_ok = pres.get("camera_active") and (now - pres.get("timestamp", 0)) < 3.0
+        if not cfg["watch"] or not cam_ok:
+            absent_since = None
+            if not cfg["watch"]:
+                armed = False
+            continue
+        if tracker.last_seen_time and now - tracker.last_seen_time < 1.2:
+            armed = True
+            absent_since = None
+            continue
+        if not armed:
+            continue
+        if absent_since is None:
+            absent_since = max(tracker.last_seen_time, now - 1.2)
+        if now - absent_since >= cfg["lock_after"]:
+            print(f"[LOCK] Ninguém na câmera há {cfg['lock_after']}s. Ativando o olho com bloqueio.", flush=True)
+            try:
+                trigger_lock()
+            except Exception as e:
+                print(f"[!] Falha ao bloquear: {e}", flush=True)
+            armed = False
+            absent_since = None
+
+
+threading.Thread(target=_absence_watcher, daemon=True).start()
+
+
 # ================= TEMAS =================
 
 def scan_user_themes():
@@ -424,6 +564,7 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
         clean_path = self.path.split("?")[0]
 
         if clean_path == "/api/presence":
+            tracker.touch()
             pres = tracker.get_presence()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -443,6 +584,7 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             try:
                 while True:
+                    tracker.touch()
                     pres = tracker.get_presence()
                     msg = f"data: {json.dumps(pres)}\n\n"
                     self.wfile.write(msg.encode("utf-8"))
@@ -450,6 +592,17 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
                     time.sleep(0.04)
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
                 pass
+            return
+
+        if clean_path == "/api/config":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store")
+            self.end_headers()
+            with config_lock:
+                body = dict(config)
+            body["options"] = LOCK_OPTIONS
+            self.wfile.write(json.dumps(body).encode("utf-8"))
             return
 
         if clean_path == "/api/debug_cam":
@@ -463,6 +616,7 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if clean_path == "/api/camera_snapshot":
+            tracker.touch()
             jpeg = tracker.get_last_jpeg()
             if jpeg:
                 self.send_response(200)
@@ -484,6 +638,7 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             try:
                 while True:
+                    tracker.touch()
                     jpeg = tracker.get_last_jpeg()
                     if jpeg:
                         self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
@@ -536,6 +691,20 @@ class EyeRequestHandler(SimpleHTTPRequestHandler):
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(str(e).encode())
+            return
+
+        if self.path == "/api/config":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                raw = json.loads(self.rfile.read(length) or b"{}")
+                body = update_config(raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(body).encode("utf-8"))
+            except (ValueError, OSError):
+                self.send_response(400)
+                self.end_headers()
             return
 
         self.send_response(404)

@@ -173,6 +173,19 @@ body.idle {
   transform: scale(1.1);
 }
 
+/* Bloqueio por ausência */
+.lock-toggle.on { color: #00ffaa; background: rgba(0, 255, 170, 0.14); }
+.lock-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e0e0ea;
+  border-radius: 9999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lock-select option { background: #14141a; color: #e0e0ea; }
+
 /* Modal / Menu de Escolha de Criatura */
 #theme-modal {
   position: fixed;

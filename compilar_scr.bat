@@ -16,7 +16,7 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /target:winexe /out:Eye.scr /r:System.Windows.Forms.dll windows\Eye.cs
+"%CSC%" /target:winexe /out:Eye.scr /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll windows\Eye.cs
 
 if %ERRORLEVEL% EQU 0 (
     echo [OK] Eye.scr compilado com sucesso!

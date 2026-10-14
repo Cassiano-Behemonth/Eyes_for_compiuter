@@ -20,6 +20,12 @@ call compilar_scr.bat >nul 2>nul
 echo [+] Configurando Eye como protetor de tela ativo...
 reg add "HKCU\Control Panel\Desktop" /v "SCRNSAVE.EXE" /t REG_SZ /d "%CD%\Eye.scr" /f >nul
 reg add "HKCU\Control Panel\Desktop" /v "ScreenSaveActive" /t REG_SZ /d "1" /f >nul
+reg add "HKCU\Control Panel\Desktop" /v "ScreenSaverIsSecure" /t REG_SZ /d "1" /f >nul
+
+:: Servidor da webcam sobe junto com o login (necessario para o bloqueio por ausencia)
+set "PYW="
+for /f "delims=" %%i in ('where pythonw 2^>nul') do if not defined PYW set "PYW=%%i"
+if defined PYW reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "EyeServer" /t REG_SZ /d "\"%PYW%\" \"%CD%pp.py\" --no-browser" /f >nul
 
 :: Tenta copiar para System32 se tiver permissao (opcional)
 copy /y "Eye.scr" "%SystemRoot%\System32\Eye.scr" >nul 2>nul

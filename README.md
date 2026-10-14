@@ -3,7 +3,7 @@
 Vigia o computador pela webcam. Se ninguém aparece na câmera por um tempo, cobre a tela com um olho de dragão
 que segue com a pupila quem passar na frente. Para sair, digite a senha do macOS e aperte Enter, ou use a digital (Touch ID).
 
-Hoje o Eye roda **só no macOS** (14 ou mais novo). Para Windows, veja [Windows](#windows) no fim deste arquivo.
+Hoje o Eye roda **só no macOS** (14 ou mais novo). Para Windows, veja [Windows](#windows) no fim deste arquivo e o guia completo em [WINDOWS.md](WINDOWS.md).
 
 ## Rodar (macOS)
 
