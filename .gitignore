@@ -3,6 +3,7 @@ build/
 __pycache__/
 *.pyc
 .eye_instance.lock
+.eye_instance.pid
 *.log
 test_*.jpg
 *test*.jpg

@@ -52,6 +52,7 @@ def launch_browser(url):
 
 # Trava de instância única para evitar múltiplos processos competindo pela webcam
 LOCK_FILE_PATH = os.path.join(BASE_DIR, ".eye_instance.lock")
+PID_FILE_PATH = os.path.join(BASE_DIR, ".eye_instance.pid")
 lock_file_handle = None
 try:
     import msvcrt
@@ -59,11 +60,36 @@ try:
     msvcrt.locking(lock_file_handle.fileno(), msvcrt.LK_NBLCK, 1)
     lock_file_handle.write(str(os.getpid()))
     lock_file_handle.flush()
+    try:
+        with open(PID_FILE_PATH, "w") as pf:
+            pf.write(str(os.getpid()))
+    except Exception:
+        pass
 except (ImportError, OSError):
     print("[*] Servidor Eye já está em execução.")
     if "--no-browser" not in sys.argv:
         launch_browser("http://127.0.0.1:54321")
     sys.exit(0)
+
+def _cleanup_lock():
+    global lock_file_handle
+    try:
+        if os.path.exists(PID_FILE_PATH):
+            os.remove(PID_FILE_PATH)
+    except Exception:
+        pass
+    if lock_file_handle:
+        try:
+            lock_file_handle.close()
+        except Exception:
+            pass
+        try:
+            if os.path.exists(LOCK_FILE_PATH):
+                os.remove(LOCK_FILE_PATH)
+        except Exception:
+            pass
+
+atexit.register(_cleanup_lock)
 
 # ================= RASTREADOR DE WEBCAM (OPENCV) =================
 

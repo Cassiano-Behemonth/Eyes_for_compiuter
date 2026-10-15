@@ -11,8 +11,9 @@ echo ===================================================
 reg add "HKCU\Software\EyeScreensaver" /v "InstallPath" /t REG_SZ /d "%CD%" /f >nul 2>nul
 
 :: 2. Encerra com precisão instâncias anteriores do app.py e trava de arquivo
-powershell -NoProfile -Command "if (Test-Path '.eye_instance.lock') { `$p = (Get-Content '.eye_instance.lock' -ErrorAction SilentlyContinue); if (`$p) { Stop-Process -Id `$p -Force -ErrorAction SilentlyContinue } }; Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -like '*app.py*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
+powershell -NoProfile -Command "if (Test-Path '.eye_instance.pid') { $p = Get-Content '.eye_instance.pid' -ErrorAction SilentlyContinue; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue } }; Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*app.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
 if exist ".eye_instance.lock" del /f /q ".eye_instance.lock" >nul 2>nul
+if exist ".eye_instance.pid" del /f /q ".eye_instance.pid" >nul 2>nul
 
 :: 3. Encerra instancias antigas do Edge Kiosk se ficaram presas em segundo plano
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name = 'msedge.exe'\" | Where-Object { $_.CommandLine -like '*EyeEdgeKioskProfile*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
