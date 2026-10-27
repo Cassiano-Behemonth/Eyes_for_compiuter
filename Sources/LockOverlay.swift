@@ -85,6 +85,19 @@ final class LockOverlay {
         }
     }
 
+    /// Pega o teclado de volta e reinicia a digital (depois de o Mac acordar, por exemplo).
+    func resume() {
+        guard !unlocking else { return }
+        focus()
+        startTouchID()
+    }
+
+    /// Sai sem pedir senha: o usuário já se autenticou em outro lugar (na tela do macOS).
+    func dismiss() {
+        guard !unlocking else { return }
+        unlock()
+    }
+
     private func buildWindows() {
         windows.forEach { $0.orderOut(nil) }
         eyes.forEach { $0.stop() }

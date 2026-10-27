@@ -95,7 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             lastSeen = Date()
             return
         }
-        if absentFor >= settings.absenceDelay { lock() }
+        // Confere a sessão também: se a tela do macOS estiver na frente, nosso olho ficaria por cima
+        // dela e nem o teclado nem a digital chegariam até ele.
+        if absentFor >= settings.absenceDelay, !Self.sessionLocked { lock() }
+    }
+
+    /// A tela de bloqueio do macOS está na frente (ou a sessão não está no monitor)? Perguntado
+    /// direto à sessão, sem depender só das notificações.
+    private static var sessionLocked: Bool {
+        guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return info["CGSSessionScreenIsLocked"] as? Bool == true || info[kCGSessionOnConsoleKey] as? Bool == false
     }
 
     private func statusText() -> String {
@@ -141,18 +150,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     private func observeSystem() {
+        // .deliverImmediately: sem isso o AppKit segura as notificações enquanto o Eye está inativo
+        // (quase sempre, já que mora na barra de menus) e o bloqueio do macOS passa despercebido.
         let dnc = DistributedNotificationCenter.default()
-        dnc.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
-            self?.systemLocked = true
-        }
-        dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
-            self?.systemLocked = false
-            self?.lastSeen = Date()
-        }
+        dnc.addObserver(self, selector: #selector(screenLocked), name: Notification.Name("com.apple.screenIsLocked"),
+                        object: nil, suspensionBehavior: .deliverImmediately)
+        dnc.addObserver(self, selector: #selector(screenUnlocked), name: Notification.Name("com.apple.screenIsUnlocked"),
+                        object: nil, suspensionBehavior: .deliverImmediately)
         let wnc = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
-            wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.lastSeen = Date() }
+            wnc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.lastSeen = Date()
+                // Depois de dormir sem senha do macOS, o foco e a digital podem ter se perdido.
+                self?.overlay?.resume()
+            }
         }
+    }
+
+    @objc private func screenLocked() {
+        systemLocked = true
+    }
+
+    @objc private func screenUnlocked() {
+        systemLocked = false
+        lastSeen = Date()
+        // Quem passou pela senha/digital do macOS já provou quem é: não pede de novo.
+        overlay?.dismiss()
     }
 
     // MARK: - Prévia
